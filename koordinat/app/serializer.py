@@ -1,7 +1,10 @@
-from app.models import Marker
+# app/serializer.py
+
 from rest_framework import serializers
+from app.models import Marker
 
 class MarkerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Marker
-        fields = '__all__'
+        fields = ['id', 'lat', 'lng', 'created_by', 'created_at']
+        read_only_fields = ['created_by', 'created_at']
