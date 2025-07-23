@@ -16,7 +16,7 @@ class AdminAccess(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='accessible_by')
 
     class Meta:
-        unique_together = ('admin', 'user') 
+        unique_together = ('admin', 'user')
 
     def __str__(self):
         return f"{self.admin.username} takip ediyor: {self.user.username}"
