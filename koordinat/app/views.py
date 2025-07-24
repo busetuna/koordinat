@@ -6,7 +6,8 @@ from app.serializer import MarkerSerializer
 from django.contrib.auth.models import User
 from rest_framework import status
 
-@api_view(['GET', 'POST'])
+
+@api_view(['GET', 'POST', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def marker_view(request):
     user = request.user
@@ -17,12 +18,10 @@ def marker_view(request):
                 markers = Marker.objects.all()
             else:
                 followed_user_ids = AdminAccess.objects.filter(admin=user).values_list('user_id', flat=True)
-
                 if followed_user_ids.exists():
                     markers = Marker.objects.filter(created_by__in=list(followed_user_ids) + [user.id])
                 else:
                     markers = Marker.objects.filter(created_by=user)
-
 
             serializer = MarkerSerializer(markers, many=True)
             return Response(serializer.data)
@@ -36,6 +35,26 @@ def marker_view(request):
             serializer.save(created_by=user)
             return Response({'status': 'saved'})
         return Response(serializer.errors, status=400)
+
+    elif request.method == 'PATCH':
+        marker_id = request.data.get('id')
+        if not marker_id:
+            return Response({'error': 'Marker ID gerekli'}, status=400)
+
+        try:
+            marker = Marker.objects.get(id=marker_id)
+            if marker.created_by != user and not user.is_superuser:
+                return Response({'error': 'Bu marker sizin değil'}, status=403)
+
+            lat = request.data.get('lat')
+            lng = request.data.get('lng')
+            if lat is not None: marker.lat = lat
+            if lng is not None: marker.lng = lng
+            marker.save()
+
+            return Response({'message': '✅ Marker güncellendi'})
+        except Marker.DoesNotExist:
+            return Response({'error': 'Marker bulunamadı'}, status=404)
 
 
 @api_view(['POST'])
