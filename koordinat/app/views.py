@@ -183,3 +183,12 @@ def current_user_view(request):
         'is_staff': user.is_staff,
         'is_superuser': user.is_superuser
     })
+
+from django.apps import AppConfig
+
+class AppConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'app'  # uygulama ismini doğru yaz
+
+    def ready(self):
+        import app.signals  # bu çok önemli!
