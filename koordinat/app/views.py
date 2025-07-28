@@ -5,7 +5,8 @@ from app.models import Marker, AdminAccess
 from app.serializer import MarkerSerializer
 from django.contrib.auth.models import User
 from rest_framework import status
-
+from django.apps import AppConfig
+from datetime import datetime
 
 @api_view(['GET', 'POST', 'PATCH'])
 @permission_classes([IsAuthenticated])
@@ -93,10 +94,10 @@ def user_list_view(request):
     if not request.user.is_staff and not request.user.is_superuser:
         return Response({'error': 'Yetkisiz erişim'}, status=403)
 
-    users = User.objects.all().values('id', 'username')
+    users = User.objects.all().select_related('profile').values('id', 'username', 'profile__msisdn')
     return Response(list(users))
 
-from datetime import datetime
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -184,11 +185,12 @@ def current_user_view(request):
         'is_superuser': user.is_superuser
     })
 
-from django.apps import AppConfig
+
 
 class AppConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'app'  # uygulama ismini doğru yaz
+    name = 'app' 
 
     def ready(self):
-        import app.signals  # bu çok önemli!
+        import app.signals
+        import app.views                                                        
