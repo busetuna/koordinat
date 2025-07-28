@@ -105,14 +105,14 @@ def user_markers_view(request, user_id):
         return Response({'error': 'Yetkisiz erişim'}, status=403)
 
     try:
-        # URL'den start ve end parametrelerini al
+       
         start = request.GET.get('start')
         end = request.GET.get('end')
 
-        # Kullanıcının tüm markerlarını getir
+       
         markers = Marker.objects.filter(created_by__id=user_id)
 
-        # Eğer tarih filtreleri varsa, apply
+      
         if start:
             try:
                 start_date = datetime.fromisoformat(start)
@@ -134,6 +134,43 @@ def user_markers_view(request, user_id):
         print("❌ Marker filtreleme hatası:", e)
         return Response({'error': 'Markerlar alınamadı'}, status=500)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_markers_view(request):
+    user = request.user
+
+    try:
+       
+        start = request.GET.get('start')
+        end = request.GET.get('end')
+
+     
+        if user.is_staff or user.is_superuser:
+            markers = Marker.objects.all()
+        else:
+            markers = Marker.objects.filter(created_by=user)
+
+      
+        if start:
+            try:
+                start_date = datetime.fromisoformat(start)
+                markers = markers.filter(created_at__gte=start_date)
+            except ValueError:
+                return Response({'error': 'Geçersiz start tarihi'}, status=400)
+
+        if end:
+            try:
+                end_date = datetime.fromisoformat(end)
+                markers = markers.filter(created_at__lte=end_date)
+            except ValueError:
+                return Response({'error': 'Geçersiz end tarihi'}, status=400)
+
+        serializer = MarkerSerializer(markers, many=True)
+        return Response(serializer.data)
+
+    except Exception as e:
+        print("❌ Marker filtreleme hatası:", e)
+        return Response({'error': 'Veriler alınamadı'}, status=500)
 
 
 @api_view(['GET'])
