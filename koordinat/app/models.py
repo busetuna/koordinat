@@ -9,8 +9,8 @@ class Marker(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Marker({self.lat}, {self.lng})"
-    
+        return f"Marker({self.lat}, {self.lng}, {self.msisdn})"
+
 
 class AdminAccess(models.Model):
     admin = models.ForeignKey(User, on_delete=models.CASCADE, related_name='admin_access')
@@ -25,6 +25,8 @@ class AdminAccess(models.Model):
 
 def generate_msisdn():
     return "905" + "".join([str(random.randint(0, 9)) for _ in range(9)])
+
+
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')

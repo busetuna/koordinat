@@ -3,7 +3,8 @@ from .models import Marker
 
 class MarkerSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='created_by.username', read_only=True)
+    msisdn = serializers.CharField(source='created_by.profile.msisdn', read_only=True)
 
     class Meta:
         model = Marker
-        fields = ['id', 'lat', 'lng', 'created_at', 'username']
+        fields = ['id', 'lat', 'lng', 'created_at', 'username', 'msisdn']
