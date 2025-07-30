@@ -8,7 +8,7 @@ from rest_framework import status
 from django.apps import AppConfig
 from datetime import datetime
 
-@api_view(['GET', 'POST', 'PATCH'])
+@api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def marker_view(request):
     user = request.user
@@ -37,25 +37,7 @@ def marker_view(request):
             return Response({'status': 'saved'})
         return Response(serializer.errors, status=400)
 
-    elif request.method == 'PATCH':
-        marker_id = request.data.get('id')
-        if not marker_id:
-            return Response({'error': 'Marker ID gerekli'}, status=400)
-
-        try:
-            marker = Marker.objects.get(id=marker_id)
-            if marker.created_by != user and not user.is_superuser:
-                return Response({'error': 'Bu marker sizin değil'}, status=403)
-
-            lat = request.data.get('lat')
-            lng = request.data.get('lng')
-            if lat is not None: marker.lat = lat
-            if lng is not None: marker.lng = lng
-            marker.save()
-
-            return Response({'message': '✅ Marker güncellendi'})
-        except Marker.DoesNotExist:
-            return Response({'error': 'Marker bulunamadı'}, status=404)
+   
 
 
 @api_view(['POST'])
