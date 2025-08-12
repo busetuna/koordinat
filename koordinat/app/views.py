@@ -1,3 +1,5 @@
+from django.http import JsonResponse
+import requests
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -7,8 +9,11 @@ from django.contrib.auth.models import User
 from rest_framework import status
 from django.apps import AppConfig
 from datetime import datetime
+import os
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-@api_view(['GET', 'POST'])
+@api_view(['GET', 'POST', 'PATCH']) #Marker 
 @permission_classes([IsAuthenticated])
 def marker_view(request):
     user = request.user
@@ -37,10 +42,28 @@ def marker_view(request):
             return Response({'status': 'saved'})
         return Response(serializer.errors, status=400)
 
-   
+    elif request.method == 'PATCH':
+        marker_id = request.data.get('id')
+        if not marker_id:
+            return Response({'error': 'Marker ID gerekli'}, status=400)
+
+        try:
+            marker = Marker.objects.get(id=marker_id)
+            if marker.created_by != user and not user.is_superuser:
+                return Response({'error': 'Bu marker sizin değil'}, status=403)
+
+            lat = request.data.get('lat')
+            lng = request.data.get('lng')
+            if lat is not None: marker.lat = lat
+            if lng is not None: marker.lng = lng
+            marker.save()
+
+            return Response({'message': '✅ Marker güncellendi'})
+        except Marker.DoesNotExist:
+            return Response({'error': 'Marker bulunamadı'}, status=404)
 
 
-@api_view(['POST'])
+@api_view(['POST']) #user
 def register_view(request):
     username = request.data.get('username')
     password = request.data.get('password')
@@ -55,7 +78,7 @@ def register_view(request):
     return Response({'message': '✅ Kayıt başarılı'}, status=status.HTTP_201_CREATED)
 
 
-@api_view(['POST'])
+@api_view(['POST']) #admin
 @permission_classes([IsAuthenticated])
 def add_access(request):
     if not request.user.is_staff:
@@ -70,7 +93,7 @@ def add_access(request):
         return Response({'error': 'Kullanıcı bulunamadı'}, status=404)
     
 
-@api_view(['GET'])
+@api_view(['GET']) #admin
 @permission_classes([IsAuthenticated])
 def user_list_view(request):
     if not request.user.is_staff and not request.user.is_superuser:
@@ -81,7 +104,7 @@ def user_list_view(request):
 
 
 
-@api_view(['GET'])
+@api_view(['GET']) #admin
 @permission_classes([IsAuthenticated])
 def user_markers_view(request, user_id):
     if not request.user.is_staff and not request.user.is_superuser:
@@ -117,7 +140,7 @@ def user_markers_view(request, user_id):
         print("❌ Marker filtreleme hatası:", e)
         return Response({'error': 'Markerlar alınamadı'}, status=500)
 
-@api_view(['GET'])
+@api_view(['GET']) #user
 @permission_classes([IsAuthenticated])
 def my_markers_view(request):
     user = request.user
@@ -156,7 +179,7 @@ def my_markers_view(request):
         return Response({'error': 'Veriler alınamadı'}, status=500)
 
 
-@api_view(['GET'])
+@api_view(['GET']) #user
 @permission_classes([IsAuthenticated])
 def current_user_view(request):
     user = request.user
@@ -167,12 +190,40 @@ def current_user_view(request):
         'is_superuser': user.is_superuser
     })
 
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        # Add custom claims
+        token['username'] = user.username
+        token['is_staff'] = user.is_staff
+        return token
 
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
 
-class AppConfig(AppConfig):
+class AppConfig(AppConfig):                                  
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'app' 
 
     def ready(self):
         import app.signals
         import app.views                                                        
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def towers_in_bbox(request):
+    OCID_KEY = os.environ.get("OCID_KEY") 
+    bbox = request.GET.get('bbox')
+    if not bbox:
+        return JsonResponse({'error': 'bbox gerekli'}, status=400)
+    try:
+        r = requests.get(
+            "https://opencellid.org/cell/getInArea",
+            params={'key': OCID_KEY, 'BBOX': bbox, 'format': 'json'},
+            timeout=10
+        )
+        return JsonResponse(r.json(), status=r.status_code, safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=502)
