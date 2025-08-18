@@ -64,7 +64,18 @@ INSTALLED_APPS = [
     'app.apps.AppConfig',
     'drf_yasg',
 ]
-
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "loggers": {
+        "django": {"handlers": ["console"], "level": "INFO"},
+        # senin app modülün (ör: 'app' ya da 'api')
+        "": {"handlers": ["console"], "level": "INFO"},
+    },
+}
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # En üste ekleyin
     'django.middleware.common.CommonMiddleware',
@@ -86,6 +97,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8080",    # Swagger UI
     "http://127.0.0.1:8080",
 ]
+
+
+# Eğer hala çalışmazsa, geçici olarak:
+CORS_ALLOW_ALL_ORIGINS = True 
 
 CORS_ALLOW_CREDENTIALS = True
 

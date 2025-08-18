@@ -1,113 +1,86 @@
-import os,  requests
+import os, math, logging, requests
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 
-OCID_KEY = os.environ.get("OCID_KEY")
+logger = logging.getLogger(__name__)
 
-def _normalize_cells(raw):
-    """
-    Dönen gövde hangi şemada olursa olsun tek tipe getir:
-    {
-      "cells": [
-        {"lat": float, "lon": float, "radio": str, "mcc": int, "mnc": int, "lac": int, "cellid": int, "range": int, "updated": str, ...}
-      ]
-    }
-    """
+def _parse_bbox_str(bbox_str):
     try:
-        # Birkaç olası kök
-        candidates = []
-        if isinstance(raw, dict):
-            for key in ("cells", "results", "data", "items"):
-                if isinstance(raw.get(key), list):
-                    candidates = raw.get(key)
-                    break
-        if not candidates and isinstance(raw, list):
-            candidates = raw
-
-        cells = []
-        for c in candidates:
-            # Çeşitli alan adlarını normalize et
-            lat = c.get("lat") or c.get("latitude") or c.get("latDeg")
-            lon = c.get("lon") or c.get("lng") or c.get("long") or c.get("longitude") or c.get("lonDeg")
-            if lat is None or lon is None:
-                continue
-            try:
-                lat = float(lat)
-                lon = float(lon)
-            except (TypeError, ValueError):
-                continue
-
-            cells.append({
-                "lat": lat,
-                "lon": lon,
-                "radio": c.get("radio") or c.get("tech") or c.get("technology"),
-                "mcc": c.get("mcc") or c.get("MCC"),
-                "mnc": c.get("mnc") or c.get("MNC"),
-                "lac": c.get("lac") or c.get("LAC") or c.get("tac") or c.get("enbid"),
-                "cellid": c.get("cellid") or c.get("cid") or c.get("ecid") or c.get("ncid"),
-                "range": c.get("range") or c.get("coverage") or c.get("radius"),
-                "updated": c.get("updated") or c.get("last_seen") or c.get("last_update"),
-            })
-        return {"cells": cells}
+        lat1, lon1, lat2, lon2 = [float(x) for x in bbox_str.split(',')]
+        sw_lat, ne_lat = sorted([lat1, lat2])
+        sw_lon, ne_lon = sorted([lon1, lon2])
+        return sw_lat, sw_lon, ne_lat, ne_lon
     except Exception:
-        # Son çare: hiç dokunmadan sarmala
-        return {"cells": []}
+        return None
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def towers_in_bbox(request):
-    bbox = request.GET.get('bbox')
-    if not bbox:
+    OCID_KEY = os.environ.get("OCID_KEY")
+    if not OCID_KEY:
+        return JsonResponse({'error': 'OCID_KEY ortam değişkeni tanımlı değil.'}, status=500)
+
+    bbox_str = request.GET.get('bbox')
+    if not bbox_str:
         return JsonResponse({'error': 'bbox gerekli'}, status=400)
 
-    if not OCID_KEY:
-        return JsonResponse({'error': 'OCID_KEY tanımlı değil (server ortam değişkeni).'}, status=500)
+    parsed = _parse_bbox_str(bbox_str)
+    if not parsed:
+        return JsonResponse({'error': 'bbox formatı LAT1,LON1,LAT2,LON2 olmalı'}, status=400)
+
+    sw_lat, sw_lon, ne_lat, ne_lon = parsed
+    # ✅ Doğru sıra: LON,LAT,LON,LAT
+    bbox_param = f"{sw_lon},{sw_lat},{ne_lon},{ne_lat}"
 
     try:
-        # Bazı API’ler 'bbox', bazıları 'BBOX' kabul ediyor; ikisini de gönder.
-        params = {
-            'key': OCID_KEY,
-            'BBOX': bbox,
-            'bbox': bbox,
-            'format': 'json',
-        }
+        mid_lat = (sw_lat + ne_lat) / 2.0
+        dy_m = (ne_lat - sw_lat) * 111_000
+        dx_m = (ne_lon - sw_lon) * 111_000 * math.cos(math.radians(mid_lat))
+        area_m2 = abs(dx_m * dy_m)
+        if area_m2 > 4_000_000:
+            return JsonResponse({'error': 'bbox çok geniş (max ~4 km²).'}, status=400)
+    except Exception:
+        pass
 
+    try:
         r = requests.get(
             "https://opencellid.org/cell/getInArea",
-            params=params,
-            timeout=12
+            params={'key': OCID_KEY, 'BBOX': bbox_param, 'format': 'json'},
+            timeout=15
         )
+        logger.info("[OCID] %s -> %s", r.url, r.status_code)
+       
+        try:
+            data = r.json()
+        except ValueError:
+            data = {'error': 'OpenCellID JSON döndürmedi',
+                    'body': r.text[:500],
+                    }
 
-        content_type = r.headers.get("Content-Type", "")
-        # 200 değilse ya da JSON değilse ham hata döndür
         if r.status_code != 200:
-            payload = None
-            try:
-                payload = r.json()
-            except Exception:
-                payload = {"text": r.text[:500]}
             return JsonResponse({
-                "error": "Upstream error",
-                "status": r.status_code,
-                "upstream": payload,
-                "sent_params": params
+                'error': 'OpenCellID non-200',
+                'status': r.status_code,
+                'url': r.url,
+                'body': r.text[:1000],
+            }, status=r.status_code)
+
+        try:
+            data = r.json()
+        except ValueError:
+            return JsonResponse({
+                'error': 'OpenCellID JSON döndürmedi',
+                'status': r.status_code,
+                'url': r.url,
+                'body': r.text[:1000],
+                "cells": data.get("cells", []) if isinstance(data, dict) else []
             }, status=502)
 
-        # JSON değilse (ör. HTML döndüyse) yakala
-        if "json" not in content_type.lower():
-            return JsonResponse({
-                "error": "Upstream non-JSON response",
-                "status": r.status_code,
-                "content_type": content_type,
-                "snippet": r.text[:500]
-            }, status=502)
-
-        raw = r.json()
-        normalized = _normalize_cells(raw)
-        return JsonResponse(normalized, status=200, safe=False)
+        data['_debug_url'] = r.url  # isteğe bağlı
+        return JsonResponse(data, status=200, safe=False)
 
     except requests.Timeout:
-        return JsonResponse({'error': 'OpenCellID timeout'}, status=504)
+        return JsonResponse({'error': 'OpenCellID zaman aşımı'}, status=504)
     except Exception as e:
-        return JsonResponse({'error': f'proxy-failure: {str(e)}'}, status=502)
+        return JsonResponse({'error': str(e)}, status=502)
