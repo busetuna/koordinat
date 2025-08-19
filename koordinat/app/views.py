@@ -219,10 +219,10 @@ class AppConfig(AppConfig):
 
 
 def _parse_bbox_str(bbox_str):
-    # Beklenen: LAT1,LON1,LAT2,LON2 (SW ve NE)
+   
     try:
         lat1, lon1, lat2, lon2 = [float(x) for x in bbox_str.split(',')]
-        # normalize: SW/NE sırala
+      
         sw_lat, ne_lat = sorted([lat1, lat2])
         sw_lon, ne_lon = sorted([lon1, lon2])
         return sw_lat, sw_lon, ne_lat, ne_lon
@@ -246,7 +246,7 @@ def _parse_bbox_str(bbox_str):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
-# @cache_page(60)  # DEBUG’te kapalı tut
+# @cache_page(60)  
 def towers_in_bbox(request):
     OCID_KEY = os.environ.get("OCID_KEY")
     if not OCID_KEY:
@@ -261,7 +261,7 @@ def towers_in_bbox(request):
         return JsonResponse({'error': 'bbox formatı LAT1,LON1,LAT2,LON2 olmalı'}, status=400)
 
     sw_lat, sw_lon, ne_lat, ne_lon = parsed
-    # ✅ Doğru sıra: LON,LAT,LON,LAT
+   
     bbox_param = f"{sw_lon},{sw_lat},{ne_lon},{ne_lat}"
 
     try:
@@ -301,7 +301,7 @@ def towers_in_bbox(request):
                 'body': r.text[:1000],
             }, status=502)
 
-        data['_debug_url'] = r.url  # isteğe bağlı
+        data['_debug_url'] = r.url 
         return JsonResponse(data, status=200, safe=False)
 
     except requests.Timeout:

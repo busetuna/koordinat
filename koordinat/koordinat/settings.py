@@ -76,6 +76,15 @@ LOGGING = {
         "": {"handlers": ["console"], "level": "INFO"},
     },
 }
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "ocid-cache",
+        "TIMEOUT": None,  # per-set TTL kullanıyoruz
+    }
+}
+
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # En üste ekleyin
     'django.middleware.common.CommonMiddleware',
